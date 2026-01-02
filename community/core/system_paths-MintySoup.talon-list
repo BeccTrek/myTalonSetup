@@ -1,0 +1,16 @@
+list: user.system_paths
+hostname: MintySoup
+-
+user: /home/soup
+desktop: /home/soup/Desktop
+desk: /home/soup/Desktop
+documents: /home/soup/Documents
+docks: /home/soup/Documents
+downloads: /home/soup/Downloads
+music: /home/soup/Music
+pictures: /home/soup/Pictures
+videos: /home/soup/Videos
+talon home: /home/soup/.talon
+talon recordings: /home/soup/.talon/recordings
+talon user: /home/soup/.talon/user
+home: /home/soup

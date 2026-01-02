@@ -1,0 +1,11 @@
+# Talon runtime / caches
+*.pyc
+__pycache__/
+.log/
+logs/
+state.json
+
+# OS junk
+.DS_Store
+Thumbs.db
+

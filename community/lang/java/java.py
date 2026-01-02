@@ -1,0 +1,337 @@
+from contextlib import suppress
+from enum import Enum, auto
+from typing import Union
+
+from talon import Context, Module, actions, settings
+
+from ...core.described_functions import create_described_insert_between
+from ..tags.operators import Operators
+
+ctx = Context()
+mod = Module()
+ctx.matches = r"""
+code.language: java
+"""
+
+# Primitive Types
+java_primitive_types = {
+    "boolean": "boolean",
+    "int": "int",
+    "float": "float",
+    "byte": "byte",
+    "double": "double",
+    "short": "short",
+    "long": "long",
+    "char": "char",
+    "void": "void",
+}
+
+# Java Boxed Types
+java_boxed_types = {
+    "Byte": "Byte",
+    "Integer": "Integer",
+    "Double": "Double",
+    "Short": "Short",
+    "Float": "Float",
+    "Long": "Long",
+    "Boolean": "Boolean",
+    "Character": "Character",
+    "Void": "Void",
+}
+
+mod.list("java_boxed_type", desc="Java Boxed Types")
+ctx.lists["self.java_boxed_type"] = java_boxed_types
+
+# Common Classes
+java_common_classes = {
+    "Object": "Object",
+    "string": "String",
+    "thread": "Thread",
+    "exception": "Exception",
+}
+
+mod.list("java_common_class", desc="Java Common Classes")
+ctx.lists["self.java_common_class"] = java_common_classes
+
+
+# Java Generic Data Structures
+java_generic_data_structures = {
+    # Interfaces
+    "set": "Set",
+    "list": "List",
+    "queue": "Queue",
+    "deque": "Deque",
+    "map": "Map",
+    # Classes
+    "hash set": "HashSet",
+    "array list": "ArrayList",
+    "hash map": "HashMap",
+}
+
+unboxed_types = java_primitive_types.copy()
+unboxed_types.update(java_common_classes)
+unboxed_types.update(java_generic_data_structures)
+
+ctx.lists["user.code_type"] = unboxed_types
+
+mod.list("java_generic_data_structure", desc="Java Generic Data Structures")
+ctx.lists["self.java_generic_data_structure"] = java_generic_data_structures
+
+# Java Modifies
+java_modifiers = {
+    "public": "public",
+    "private": "private",
+    "protected": "protected",
+    "static": "static",
+    "synchronized": "synchronized",
+    "volatile": "volatile",
+    "transient": "transient",
+    "abstract": "abstract",
+    "interface": "interface",
+    "final": "final",
+}
+
+mod.list("java_modifier", desc="Java Modifiers")
+ctx.lists["self.java_modifier"] = java_modifiers
+
+operators = Operators(
+    # code_operators_array
+    SUBSCRIPT=create_described_insert_between("[", "]"),
+    # code_operators_assignment
+    ASSIGNMENT=" = ",
+    ASSIGNMENT_SUBTRACTION=" -= ",
+    ASSIGNMENT_ADDITION=" += ",
+    ASSIGNMENT_MULTIPLICATION=" *= ",
+    ASSIGNMENT_DIVISION=" /= ",
+    ASSIGNMENT_MODULO=" %= ",
+    ASSIGNMENT_INCREMENT="++",
+    ASSIGNMENT_BITWISE_AND=" &= ",
+    ASSIGNMENT_BITWISE_LEFT_SHIFT=" <<= ",
+    ASSIGNMENT_BITWISE_RIGHT_SHIFT=" >>= ",
+    # code_operators_bitwise
+    BITWISE_AND=" & ",
+    BITWISE_OR=" | ",
+    BITWISE_EXCLUSIVE_OR=" ^ ",
+    BITWISE_LEFT_SHIFT=" << ",
+    BITWISE_RIGHT_SHIFT=" >> ",
+    # code_operators_lambda
+    LAMBDA=" -> ",
+    # code_operators_math
+    MATH_SUBTRACT=" - ",
+    MATH_ADD=" + ",
+    MATH_MULTIPLY=" * ",
+    MATH_DIVIDE=" / ",
+    MATH_MODULO=" % ",
+    MATH_EXPONENT=" ^ ",
+    MATH_EQUAL=" == ",
+    MATH_NOT_EQUAL=" != ",
+    MATH_GREATER_THAN=" > ",
+    MATH_GREATER_THAN_OR_EQUAL=" >= ",
+    MATH_LESS_THAN=" < ",
+    MATH_LESS_THAN_OR_EQUAL=" <= ",
+    MATH_AND=" && ",
+    MATH_OR=" || ",
+    MATH_NOT="!",
+)
+
+
+def public_camel_case_format_variable(variable: str):
+    return actions.user.formatted_text(variable, "PUBLIC_CAMEL_CASE")
+
+
+# This is not part of the long term stable API
+# After we implement generics support for several languages,
+# we plan on abstracting out from the specific implementations into a general grammar
+
+
+@mod.capture(rule="{user.java_boxed_type} | <user.text>")
+def java_type_parameter_argument(m) -> str:
+    """A Java type parameter for a generic data structure"""
+    with suppress(AttributeError):
+        return m.java_boxed_type
+    return public_camel_case_format_variable(m.text)
+
+
+@mod.capture(rule="[type] {user.java_generic_data_structure} | type <user.text>")
+def java_generic_data_structure(m) -> str:
+    """A Java generic data structure that takes type parameter arguments"""
+    with suppress(AttributeError):
+        return m.java_generic_data_structure
+    return public_camel_case_format_variable(m.text)
+
+
+class GenericTypeConnector(Enum):
+    AND = auto()
+    OF = auto()
+    DONE = auto()
+
+
+@mod.capture(rule="done")
+def java_generic_type_connector_done(m) -> GenericTypeConnector:
+    """Denotes ending a nested generic type"""
+    return GenericTypeConnector.DONE
+
+
+@mod.capture(rule="and|of|<user.java_generic_type_connector_done>")
+def java_generic_type_connector(m) -> GenericTypeConnector:
+    """Determines how to put generic type parameters together"""
+    with suppress(AttributeError):
+        return m.java_generic_type_connector_done
+    return GenericTypeConnector[m[0].upper()]
+
+
+@mod.capture(
+    rule="<user.java_generic_type_connector> <user.java_type_parameter_argument> [<user.java_generic_type_connector_done>]+"
+)
+def java_generic_type_continuation(m) -> list[Union[GenericTypeConnector, str]]:
+    """A generic type parameter that goes after the first using connectors"""
+    result = [m.java_generic_type_connector, m.java_type_parameter_argument]
+    with suppress(AttributeError):
+        dones = m.java_generic_type_connector_done_list
+        result.extend(dones)
+    return result
+
+
+@mod.capture(rule="<user.java_generic_type_continuation>+")
+def java_generic_type_additional_type_parameters(
+    m,
+) -> list[Union[GenericTypeConnector, str]]:
+    """Type parameters for a generic data structure after the first one"""
+    result = []
+    for continuation in m.java_generic_type_continuation_list:
+        result.extend(continuation)
+    return result
+
+
+def is_immediately_after_nesting_exit(pieces: list[str]) -> bool:
+    return len(pieces) >= 1 and pieces[-1] == ">"
+
+
+@mod.capture(
+    rule="<user.java_type_parameter_argument> [<user.java_generic_type_additional_type_parameters>]"
+)
+def java_type_parameter_arguments(m) -> str:
+    """Formatted Java type parameter arguments"""
+    parameters = [m.java_type_parameter_argument]
+    with suppress(AttributeError):
+        parameters.extend(m.java_generic_type_additional_type_parameters)
+    pieces = []
+    nesting: int = 0
+    for parameter in parameters:
+        if isinstance(parameter, str):
+            if is_immediately_after_nesting_exit(pieces):
+                pieces.append(", ")
+            pieces.append(parameter)
+        else:
+            match parameter:
+                case GenericTypeConnector.AND:
+                    pieces.append(", ")
+                case GenericTypeConnector.OF:
+                    pieces.append("<")
+                    nesting += 1
+                case GenericTypeConnector.DONE:
+                    pieces.append(">")
+                    nesting -= 1
+    if nesting > 0:
+        pieces.append(">" * nesting)
+    return "".join(pieces)
+
+
+@mod.capture(
+    rule="<user.java_generic_data_structure> of <user.java_type_parameter_arguments>"
+)
+def java_generic_type(m) -> str:
+    """A generic type with specific type parameters"""
+    parameters = m.java_type_parameter_arguments
+    return f"{m.java_generic_data_structure}<{parameters}>"
+
+
+# End of unstable section
+
+
+@ctx.action_class("user")
+class UserActions:
+    def code_get_operators() -> Operators:
+        return operators
+
+    def code_self():
+        actions.insert("this")
+
+    def code_operator_object_accessor():
+        actions.insert(".")
+
+    def code_insert_null():
+        actions.insert("null")
+
+    def code_insert_is_null():
+        actions.insert(" == null")
+
+    def code_insert_is_not_null():
+        actions.insert(" != null")
+
+    def code_insert_true():
+        actions.insert("true")
+
+    def code_insert_false():
+        actions.insert("false")
+
+    def code_insert_function(text: str, selection: str):
+        text += f"({selection or ''})"
+        actions.user.paste(text)
+        actions.edit.left()
+
+    def code_private_function(text: str):
+        """Inserts private function declaration"""
+        result = "private void {}".format(
+            actions.user.formatted_text(
+                text, settings.get("user.code_private_function_formatter")
+            )
+        )
+
+        actions.user.code_insert_function(result, None)
+
+    def code_private_static_function(text: str):
+        """Inserts private static function"""
+        result = "private static void {}".format(
+            actions.user.formatted_text(
+                text, settings.get("user.code_private_function_formatter")
+            )
+        )
+
+        actions.user.code_insert_function(result, None)
+
+    def code_protected_function(text: str):
+        result = "void {}".format(
+            actions.user.formatted_text(
+                text, settings.get("user.code_protected_function_formatter")
+            )
+        )
+
+        actions.user.code_insert_function(result, None)
+
+    def code_protected_static_function(text: str):
+        result = "static void {}".format(
+            actions.user.formatted_text(
+                text, settings.get("user.code_protected_function_formatter")
+            )
+        )
+
+        actions.user.code_insert_function(result, None)
+
+    def code_public_function(text: str):
+        result = "public void {}".format(
+            actions.user.formatted_text(
+                text, settings.get("user.code_public_function_formatter")
+            )
+        )
+
+        actions.user.code_insert_function(result, None)
+
+    def code_public_static_function(text: str):
+        result = "public static void {}".format(
+            actions.user.formatted_text(
+                text, settings.get("user.code_public_function_formatter")
+            )
+        )
+
+        actions.user.code_insert_function(result, None)
