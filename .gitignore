@@ -9,3 +9,9 @@ state.json
 .DS_Store
 Thumbs.db
 
+#UI scaling/ other fixes for laptop
+ui_scale.talon
+community/core/system_paths-soup-AERO-15-SA.talon-list
+
+#python venv
+.venv/
