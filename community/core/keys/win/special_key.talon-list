@@ -13,7 +13,7 @@ escape: escape
 space: space
 tab: tab
 insert: insert
-wipe: backspace
+snip: backspace
 delete: backspace
 forward delete: delete
 menu key: menu
